@@ -85,12 +85,16 @@ ConnectRedirectClassify(
 	if (targetPid == 0 || destIp == 0)
 		return;
 
-	// Does this connection come from our target process?
-	//if (!(inMetaValues->currentMetadataValues & FWPS_METADATA_FIELD_PROCESS_ID))
-	//    return;
+	// not every filtering layer or every packet provides a PID
+	if (!(inMetaValues->currentMetadataValues & FWPS_METADATA_FIELD_PROCESS_ID))
+	    return;
 
-	//if (inMetaValues->processId != (UINT64)targetPid)
-	//    return;
+	if (inMetaValues->processId != (UINT64)targetPid) {
+		DbgPrintEx(DPFLTR_IHVNETWORK_ID, DPFLTR_INFO_LEVEL,
+			"[WfpRedir] PID %lu does not match target %lu, skipping.\n",
+			(ULONG)inMetaValues->processId, targetPid);
+	    return;
+	}
 
 	// layerData points to the modifiable connect request
 	if (layerData == NULL)
