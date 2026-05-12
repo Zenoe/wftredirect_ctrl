@@ -1,0 +1,62 @@
+;
+; WfpHello1.inf
+;
+
+[Version]
+Signature   = "$WINDOWS NT$"
+Class       = System ; TODO: specify appropriate Class
+ClassGuid   = {4d36e97d-e325-11ce-bfc1-08002be10318} ; TODO: specify appropriate ClassGuid
+Provider    = %ManufacturerName%
+CatalogFile = WfpHello1.cat
+DriverVer   = ; TODO: set DriverVer in stampinf property pages
+PnpLockdown = 1
+
+[DestinationDirs]
+DefaultDestDir = 13
+
+[SourceDisksNames]
+1 = %DiskName%,,,""
+
+[SourceDisksFiles]
+WfpHello1.sys = 1,,
+
+;*****************************************
+; Install Section
+;*****************************************
+
+[Manufacturer]
+%ManufacturerName% = Standard,NT$ARCH$.10.0...16299 ; %13% support introduced in build 16299
+
+[Standard.NT$ARCH$.10.0...16299]
+%WfpHello1.DeviceDesc% = WfpHello1_Device, Root\WfpHello1 ; TODO: edit hw-id
+
+[WfpHello1_Device.NT]
+CopyFiles = File_Copy
+
+[File_Copy]
+WfpHello1.sys
+
+;-------------- Service installation
+[WfpHello1_Device.NT.Services]
+AddService = WfpHello1,%SPSVCINST_ASSOCSERVICE%, WfpHello1_Service_Inst
+
+; -------------- WfpHello1 driver install sections
+[WfpHello1_Service_Inst]
+DisplayName    = %WfpHello1.SVCDESC%
+ServiceType    = 1               ; SERVICE_KERNEL_DRIVER
+StartType      = 3               ; SERVICE_DEMAND_START
+ErrorControl   = 1               ; SERVICE_ERROR_NORMAL
+ServiceBinary  = %13%\WfpHello1.sys
+
+[WfpHello1_Device.NT.Wdf]
+KmdfService = WfpHello1, WfpHello1_wdfsect
+
+[WfpHello1_wdfsect]
+KmdfLibraryVersion = $KMDFVERSION$
+
+[Strings]
+SPSVCINST_ASSOCSERVICE = 0x00000002
+ManufacturerName = "<Your manufacturer name>" ;TODO: Replace with your manufacturer name
+DiskName = "WfpHello1 Installation Disk"
+WfpHello1.DeviceDesc = "WfpHello1 Device"
+WfpHello1.SVCDESC = "WfpHello1 Service"

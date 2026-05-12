@@ -1,0 +1,22 @@
+﻿# 开始重定向（把 PID 1234 的所有流量重定向到 10.8.0.2）
+wfpredir_ctrl set 1234 10.8.0.2
+
+# 停止重定向
+wfpredir_ctrl clear
+
+
+# 1. 安装驱动（管理员）
+sc create WfpRedirect type= kernel binPath= "C:\path\to\WfpRedirect.sys"
+sc start WfpRedirect
+
+# 2. 查到目标进程的 PID（比如 chrome.exe）
+tasklist | findstr chrome
+
+# 3. 开始重定向
+wfpredir_ctrl set <PID> 10.8.0.2
+
+# 4. 打开 DebugView 看日志，会输出每条被重定向的连接
+
+# 5. 停止
+wfpredir_ctrl clear
+sc stop WfpRedirect
