@@ -118,6 +118,14 @@ WfpRedirRegister(_In_ PDEVICE_OBJECT DeviceObject)
         sl.displayData.name = L"WfpRedirect Sublayer";
         sl.weight = 0x8000;
 
+        /*When you don't specify a sublayer in your filter, WFP automatically places it in the default sublayer (FWPM_SUBLAYER_UNIVERSAL). That works fine for simple cases like yours.
+            People add a custom sublayer when they need :
+
+        Weight / priority control — sublayers have their own weight, so you can ensure your callout's filters run before/after other vendors' filters(AV software, VPNs, etc.)
+            Atomic cleanup — if you add many filters, deleting the sublayer removes all of them at once instead of tracking individual filter IDs
+            Isolation — your filters won't conflict with or be affected by other drivers modifying the default sublayer
+            Multiple drivers coexisting — each driver gets its own sublayer namespace to avoid collisions
+            */
         status = FwpmSubLayerAdd0(g_EngineHandle, &sl, NULL);
         if (status == STATUS_OBJECT_NAME_COLLISION) status = STATUS_SUCCESS;
         if (!NT_SUCCESS(status)) { FwpmTransactionAbort0(g_EngineHandle); WfpRedirUnregister(); return status; }
