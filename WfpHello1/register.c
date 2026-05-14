@@ -5,7 +5,9 @@
 
 static HANDLE  g_EngineHandle = NULL;
 static UINT32  g_ConnectCalloutId = 0;
+static UINT32  g_BindCalloutId = 0;
 static BOOLEAN g_ConnectCalloutReg = FALSE;
+static BOOLEAN g_BindCalloutReg = FALSE;
 
 // ---------------------------------------------------------------
 // Helper: register one kernel callout
@@ -87,6 +89,19 @@ WfpRedirRegister(_In_ PDEVICE_OBJECT DeviceObject)
     /* session.flags = FWPM_SESSION_FLAG_DYNAMIC; */
 
     status = FwpmEngineOpen0(NULL, RPC_C_AUTHN_WINNT, NULL, &session, &g_EngineHandle);
+
+        /* if (g_EngineHandle) { */
+        /* // Must manually delete filter, callout, sublayer */
+        /* FwpmFilterDeleteByKey0(g_EngineHandle, &WFPREDIR_CONNECT_FILTER_GUID); */
+        /* FwpmCalloutDeleteByKey0(g_EngineHandle, &WFPREDIR_CONNECT_CALLOUT_GUID); */
+
+        /* FwpmFilterDeleteByKey0(g_EngineHandle, &WFPREDIR_BIND_FILTER_GUID); */
+        /* FwpmCalloutDeleteByKey0(g_EngineHandle, &WFPREDIR_BIND_CALLOUT_GUID); */
+
+        /* FwpmSubLayerDeleteByKey0(g_EngineHandle, &WFPREDIR_SUBLAYER_GUID); */
+        /* FwpmEngineClose0(g_EngineHandle); */
+        /* } */
+
     if (!NT_SUCCESS(status)) {
         DbgPrintEx(DPFLTR_IHVNETWORK_ID, DPFLTR_ERROR_LEVEL,
             "[WfpRedir] FwpmEngineOpen0 failed: 0x%08X\n", status);
@@ -94,18 +109,30 @@ WfpRedirRegister(_In_ PDEVICE_OBJECT DeviceObject)
     }
 
     // 2. Register kernel callout
+    /* status = RegisterKernelCallout( */
+    /*     DeviceObject, */
+    /*     &WFPREDIR_CONNECT_CALLOUT_GUID, */
+    /*     ConnectRedirectClassify, */
+    /*     &g_ConnectCalloutId); */
+    /* if (!NT_SUCCESS(status)) { */
+    /*     DbgPrintEx(DPFLTR_IHVNETWORK_ID, DPFLTR_ERROR_LEVEL, */
+    /*         "[WfpRedir] Connect callout register failed: 0x%08X\n", status); */
+    /*     WfpRedirUnregister(); */
+    /*     return status; */
+    /* } */
+    /* g_ConnectCalloutReg = TRUE; */
+
     status = RegisterKernelCallout(
-        DeviceObject,
-        &WFPREDIR_CONNECT_CALLOUT_GUID,
-        ConnectRedirectClassify,
-        &g_ConnectCalloutId);
+       DeviceObject,
+       &WFPREDIR_BIND_CALLOUT_GUID,
+       BindRedirectClassify,
+       &g_BindCalloutId);
     if (!NT_SUCCESS(status)) {
-        DbgPrintEx(DPFLTR_IHVNETWORK_ID, DPFLTR_ERROR_LEVEL,
-            "[WfpRedir] Connect callout register failed: 0x%08X\n", status);
-        WfpRedirUnregister();
-        return status;
+       DbgPrintEx(DPFLTR_IHVNETWORK_ID, DPFLTR_ERROR_LEVEL,
+           "[WfpRedir] Bind callout register failed: 0x%08X\n", status);
+       return status;
     }
-    g_ConnectCalloutReg = TRUE;
+    g_BindCalloutReg = TRUE;
 
     // 3. Add management objects inside a transaction
     status = FwpmTransactionBegin0(g_EngineHandle, 0);
@@ -131,6 +158,7 @@ WfpRedirRegister(_In_ PDEVICE_OBJECT DeviceObject)
         if (!NT_SUCCESS(status)) { FwpmTransactionAbort0(g_EngineHandle); WfpRedirUnregister(); return status; }
     }
 
+    /*
     // 3b. Connect-redirect management callout + filter
     status = AddManagementCallout(
         g_EngineHandle,
@@ -146,6 +174,23 @@ WfpRedirRegister(_In_ PDEVICE_OBJECT DeviceObject)
         &WFPREDIR_CONNECT_CALLOUT_GUID,
         L"WfpRedirect Connect Filter");
     if (!NT_SUCCESS(status)) { FwpmTransactionAbort0(g_EngineHandle); WfpRedirUnregister(); return status; }
+    */
+
+    // 3c. Bind-redirect management callout + filter
+    status = AddManagementCallout(
+        g_EngineHandle,
+        &WFPREDIR_BIND_CALLOUT_GUID,
+        &FWPM_LAYER_ALE_BIND_REDIRECT_V4,
+        L"WfpRedirect Bind Callout");
+    if (!NT_SUCCESS(status)) { FwpmTransactionAbort0(g_EngineHandle); return status; }
+
+    status = AddFilter(
+        g_EngineHandle,
+        &WFPREDIR_BIND_FILTER_GUID,
+        &FWPM_LAYER_ALE_BIND_REDIRECT_V4,
+        &WFPREDIR_BIND_CALLOUT_GUID,
+        L"WfpRedirect Bind Filter");
+    if (!NT_SUCCESS(status)) { FwpmTransactionAbort0(g_EngineHandle); return status; }
 
     // 4. Commit
     status = FwpmTransactionCommit0(g_EngineHandle);
@@ -169,8 +214,17 @@ WfpRedirUnregister(VOID)
 {
         if (g_EngineHandle) {
         // Must manually delete filter, callout, sublayer
+          if(g_ConnectCalloutReg){
+
         FwpmFilterDeleteByKey0(g_EngineHandle, &WFPREDIR_CONNECT_FILTER_GUID);
         FwpmCalloutDeleteByKey0(g_EngineHandle, &WFPREDIR_CONNECT_CALLOUT_GUID);
+        }
+
+        if(g_BindCalloutReg){
+        FwpmFilterDeleteByKey0(g_EngineHandle, &WFPREDIR_BIND_FILTER_GUID);
+        FwpmCalloutDeleteByKey0(g_EngineHandle, &WFPREDIR_BIND_CALLOUT_GUID);
+        }
+
         FwpmSubLayerDeleteByKey0(g_EngineHandle, &WFPREDIR_SUBLAYER_GUID);
         FwpmEngineClose0(g_EngineHandle);
         g_EngineHandle = NULL;
@@ -184,6 +238,11 @@ WfpRedirUnregister(VOID)
     if (g_ConnectCalloutReg) {
         FwpsCalloutUnregisterById0(g_ConnectCalloutId);
         g_ConnectCalloutReg = FALSE;
+    }
+
+    if (g_BindCalloutReg) {
+        FwpsCalloutUnregisterById0(g_BindCalloutId);
+        g_BindCalloutReg = FALSE;
     }
 
     DbgPrintEx(DPFLTR_IHVNETWORK_ID, DPFLTR_INFO_LEVEL,

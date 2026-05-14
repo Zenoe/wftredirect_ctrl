@@ -47,7 +47,7 @@ ConnectRedirectClassify(
 )
 {
 	NTSTATUS                 status = STATUS_SUCCESS;
-	FWPS_CONNECT_REQUEST0* connectRequest = NULL;
+	//FWPS_CONNECT_REQUEST0* connectRequest = NULL;
 	SOCKADDR_IN* remoteAddr = NULL;
 	ULONG                    targetPid = (ULONG)g_TargetPid;
 	ULONG                    destIp = g_DestIp;
@@ -100,8 +100,6 @@ ConnectRedirectClassify(
 	if (layerData == NULL)
 		return;
 
-	connectRequest = (FWPS_CONNECT_REQUEST0*)layerData;
-
 	if (classifyContext == NULL)
 	{
 		DbgPrintEx(DPFLTR_IHVNETWORK_ID, DPFLTR_ERROR_LEVEL,
@@ -147,7 +145,7 @@ ConnectRedirectClassify(
 
 	if (remoteAddr->sin_addr.S_un.S_addr == origIp) {
 		DbgPrint("WfpRedir: Original IP is the same as destination IP, skipping rewrite.\n");
-		FwpsApplyModifiedLayerData0(classifyHandle, (PVOID)connectRequest, 0);
+		FwpsApplyModifiedLayerData0(classifyHandle, (PVOID)writableRequest, 0);
 		FwpsReleaseClassifyHandle0(classifyHandle);
 		return;
 	}
@@ -187,6 +185,105 @@ ConnectRedirectClassify(
 // Rewrites the local bind address to g_DestIp so the OS routes
 // outbound packets through the virtual NIC that owns that IP.
 // ---------------------------------------------------------------
+VOID
+BindRedirectClassify(
+	_In_        const FWPS_INCOMING_VALUES0* inFixedValues,
+	_In_        const FWPS_INCOMING_METADATA_VALUES0* inMetaValues,
+	_Inout_opt_ VOID* layerData,
+	_In_opt_    const VOID* classifyContext,
+	_In_        const FWPS_FILTER1* filter,
+	_In_        UINT64                                 flowContext,
+	_Inout_     FWPS_CLASSIFY_OUT0* classifyOut
+)
+{
+	NTSTATUS              status = STATUS_SUCCESS;
+	FWPS_BIND_REQUEST0* writableReq = NULL;
+	SOCKADDR_IN* localAddr = NULL;
+	ULONG                 targetPid = (ULONG)g_TargetPid;
+	ULONG                 destIp = g_DestIp;
+	UINT64                classifyHandle = 0;
+
+	UNREFERENCED_PARAMETER(inFixedValues);
+	UNREFERENCED_PARAMETER(filter);
+	UNREFERENCED_PARAMETER(flowContext);
+
+	if ((classifyOut->rights & FWPS_RIGHT_ACTION_WRITE) == 0)
+	{
+		KdPrint(("WfpRedirect-bind: No write rights, skipping.\n"));
+		return;
+	}
+
+	if (classifyContext == NULL)
+	{
+		KdPrint(("WfpRedirect-bind: No classifyContext, skipping.\n"));
+		return;
+	}
+
+	status = FwpsAcquireClassifyHandle0(classifyContext, 0, &classifyHandle);
+	if (!NT_SUCCESS(status))
+	{
+		KdPrint(("WfpRedirect: FwpsAcquireClassifyHandle0 failed: 0x%08X\n", status));
+		return;
+	}
+
+	classifyOut->actionType = FWP_ACTION_PERMIT;
+
+	if (targetPid == 0 || destIp == 0)
+	{
+		KdPrint(("WfpRedirect-bind: Redirection disabled (targetPid=%lu, destIp=0x%08X), skipping.\n",
+			targetPid, destIp));
+		goto Cleanup;
+	}
+
+	if (!(inMetaValues->currentMetadataValues & FWPS_METADATA_FIELD_PROCESS_ID))
+		goto Cleanup;
+
+	if (inMetaValues->processId != (UINT64)targetPid)
+	{
+		DbgPrintEx(DPFLTR_IHVNETWORK_ID, DPFLTR_INFO_LEVEL,
+			"[WfpRedir] PID %lu does not match target %lu, skipping.\n",
+			(ULONG)inMetaValues->processId, targetPid);
+		goto Cleanup;
+	}
+
+	if (layerData == NULL)
+		goto Cleanup;
+
+	status = FwpsAcquireWritableLayerDataPointer0(
+		classifyHandle,
+		filter->filterId,
+		0,
+		(PVOID*)&writableReq,
+		classifyOut);
+
+	if (!NT_SUCCESS(status) || writableReq == NULL)
+	{
+		DbgPrintEx(DPFLTR_IHVNETWORK_ID, DPFLTR_ERROR_LEVEL,
+			"[WfpRedir] Bind: FwpsAcquireWritableLayerDataPointer0 failed: 0x%08X\n", status);
+		goto Cleanup;
+	}
+
+	localAddr = (SOCKADDR_IN*)&writableReq->localAddressAndPort;
+
+	if (localAddr->sin_addr.s_addr == 0)
+	{
+		localAddr->sin_addr.s_addr = HostToNetLong(destIp);
+
+		DbgPrintEx(DPFLTR_IHVNETWORK_ID, DPFLTR_INFO_LEVEL,
+			"[WfpRedir] PID %lu: bind local --> %d.%d.%d.%d\n",
+			targetPid,
+			(destIp >> 24) & 0xFF, (destIp >> 16) & 0xFF,
+			(destIp >> 8) & 0xFF, destIp & 0xFF);
+	}
+
+	FwpsApplyModifiedLayerData0(classifyHandle, (PVOID)writableReq, 0);
+
+	classifyOut->actionType = FWP_ACTION_PERMIT;
+	classifyOut->rights &= ~FWPS_RIGHT_ACTION_WRITE;
+
+Cleanup:
+	FwpsReleaseClassifyHandle0(classifyHandle);
+}
 //VOID
 //BindRedirectClassify(
 //    _In_        const FWPS_INCOMING_VALUES0* inFixedValues,
@@ -204,24 +301,54 @@ ConnectRedirectClassify(
 //    ULONG                 targetPid = (ULONG)g_TargetPid;
 //    ULONG                 destIp = g_DestIp;
 //
+//	UINT64 classifyHandle = 0;
+//
 //    UNREFERENCED_PARAMETER(inFixedValues);
 //    UNREFERENCED_PARAMETER(layerData);
 //    UNREFERENCED_PARAMETER(filter);
 //    UNREFERENCED_PARAMETER(flowContext);
 //
+//	if ((classifyOut->rights & FWPS_RIGHT_ACTION_WRITE) == 0) {
+//		KdPrint(("WfpRedirect-bind: No write rights, skipping.\n"));
+//		return;
+//	}
+//
+//	if (classifyContext == NULL) {
+//		KdPrint(("WfpRedirect-bind: No classifyContext, skipping.\n"));
+//		return;
+//	}
+//
+//	// STEP 1: Acquire a classify handle from classifyContext
+//	status = FwpsAcquireClassifyHandle0(classifyContext, 0, &classifyHandle);
+//	if (!NT_SUCCESS(status)) {
+//		KdPrint(("WfpRedirect: FwpsAcquireClassifyHandle0 failed: 0x%08X\n", status));
+//		return;
+//	}
+//
 //    classifyOut->actionType = FWP_ACTION_PERMIT;
 //
-//    //if (targetPid == 0 || destIp == 0)
-//    //    return;
+//	if (targetPid == 0 || destIp == 0) {
+//		KdPrint(("WfpRedirect-bind: Redirection disabled (targetPid=%lu, destIp=0x%08X), skipping.\n",
+//			targetPid, destIp));
+//		return;
+//	}
 //
-//    if (destIp == 0)
+//    if (!(inMetaValues->currentMetadataValues & FWPS_METADATA_FIELD_PROCESS_ID))
 //        return;
 //
-//    //if (!(inMetaValues->currentMetadataValues & FWPS_METADATA_FIELD_PROCESS_ID))
-//    //    return;
+//	if (inMetaValues->processId != (UINT64)targetPid) {
+//		DbgPrintEx(DPFLTR_IHVNETWORK_ID, DPFLTR_INFO_LEVEL,
+//			"[WfpRedir] PID %lu does not match target %lu, skipping.\n",
+//			(ULONG)inMetaValues->processId, targetPid);
+//		return;
+//	}
 //
-//    //if (inMetaValues->processId != (UINT64)targetPid)
-//    //    return;
+//	// layerData points to the modifiable connect request
+//	if (layerData == NULL)
+//		return;
+//
+//	writableReq = (FWPS_CONNECT_REQUEST0*)layerData;
+//
 //
 //    // FwpsAcquireWritableLayerDataPointer0 要求 classifyContext 非 NULL
 //    if (classifyContext == NULL)
@@ -233,7 +360,7 @@ ConnectRedirectClassify(
 //    }
 //
 //    status = FwpsAcquireWritableLayerDataPointer0(
-//        classifyContext,
+//		classifyHandle,
 //        filter->filterId,
 //        0,
 //        (PVOID*)&writableReq,
@@ -266,11 +393,23 @@ ConnectRedirectClassify(
 //    else
 //    {
 //        // App bound explicitly — release without changes
-//        FwpsApplyModifiedLayerData0(classifyContext, (PVOID)writableReq, 0);
+//        FwpsApplyModifiedLayerData0(classifyHandle, (PVOID)writableReq, 0);
 //    }
 //
-//    classifyOut->actionType = FWP_ACTION_PERMIT;
-//}
+//
+//	// Commit the changes and release
+//	FwpsApplyModifiedLayerData0(
+//		classifyHandle,
+//		(PVOID)writableReq,
+//		0);
+//
+//	// PERMIT with the modified address
+//	classifyOut->actionType = FWP_ACTION_PERMIT;
+//	classifyOut->rights &= ~FWPS_RIGHT_ACTION_WRITE; // Clear the write right to prevent other filters from changing our decision
+//
+//	// STEP 6: Release the classify handle
+//	FwpsReleaseClassifyHandle0(classifyHandle);
+// }
 
 // ---------------------------------------------------------------
 // CommonNotify  — shared by both callouts

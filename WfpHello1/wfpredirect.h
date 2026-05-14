@@ -91,14 +91,14 @@ VOID ConnectRedirectClassify(
     _In_        UINT64                                 flowContext,
     _Inout_     FWPS_CLASSIFY_OUT0* classifyOut);
 
-//VOID BindRedirectClassify(
-//    _In_        const FWPS_INCOMING_VALUES0* inFixedValues,
-//    _In_        const FWPS_INCOMING_METADATA_VALUES0* inMetaValues,
-//    _Inout_opt_ VOID* layerData,
-//    _In_opt_    const VOID* classifyContext,
-//    _In_        const FWPS_FILTER1* filter,
-//    _In_        UINT64                                 flowContext,
-//    _Inout_     FWPS_CLASSIFY_OUT0* classifyOut);
+VOID BindRedirectClassify(
+    _In_        const FWPS_INCOMING_VALUES0* inFixedValues,
+    _In_        const FWPS_INCOMING_METADATA_VALUES0* inMetaValues,
+    _Inout_opt_ VOID* layerData,
+    _In_opt_    const VOID* classifyContext,
+    _In_        const FWPS_FILTER1* filter,
+    _In_        UINT64                                 flowContext,
+    _Inout_     FWPS_CLASSIFY_OUT0* classifyOut);
 
 NTSTATUS CommonNotify(
     _In_ FWPS_CALLOUT_NOTIFY_TYPE  notifyType,
