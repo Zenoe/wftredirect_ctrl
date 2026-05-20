@@ -108,7 +108,7 @@ WfpRedirRegister(_In_ PDEVICE_OBJECT DeviceObject)
         return status;
     }
 
-    // 2. Register kernel callout
+    /* 2a. Register kernel callout */
     /* status = RegisterKernelCallout( */
     /*     DeviceObject, */
     /*     &WFPREDIR_CONNECT_CALLOUT_GUID, */
@@ -122,6 +122,7 @@ WfpRedirRegister(_In_ PDEVICE_OBJECT DeviceObject)
     /* } */
     /* g_ConnectCalloutReg = TRUE; */
 
+    /* 2b. Register kernel callout */
     status = RegisterKernelCallout(
        DeviceObject,
        &WFPREDIR_BIND_CALLOUT_GUID,
@@ -158,26 +159,26 @@ WfpRedirRegister(_In_ PDEVICE_OBJECT DeviceObject)
         if (!NT_SUCCESS(status)) { FwpmTransactionAbort0(g_EngineHandle); WfpRedirUnregister(); return status; }
     }
 
-    /*
-    // 3b. Connect-redirect management callout + filter
-    status = AddManagementCallout(
-        g_EngineHandle,
-        &WFPREDIR_CONNECT_CALLOUT_GUID,
-        &FWPM_LAYER_ALE_CONNECT_REDIRECT_V4,
-        L"WfpRedirect Connect Callout");
-    if (!NT_SUCCESS(status)) { FwpmTransactionAbort0(g_EngineHandle); WfpRedirUnregister(); return status; }
 
-    status = AddFilter(
-        g_EngineHandle,
-        &WFPREDIR_CONNECT_FILTER_GUID,
-        &FWPM_LAYER_ALE_CONNECT_REDIRECT_V4,
-        &WFPREDIR_CONNECT_CALLOUT_GUID,
-        L"WfpRedirect Connect Filter");
-    if (!NT_SUCCESS(status)) { FwpmTransactionAbort0(g_EngineHandle); WfpRedirUnregister(); return status; }
-    */
+    // 3b. Connect-redirect management callout + filter
+    /* status = AddManagementCallout( */
+    /*     g_EngineHandle, */
+    /*     &WFPREDIR_CONNECT_CALLOUT_GUID, */
+    /*     &FWPM_LAYER_ALE_CONNECT_REDIRECT_V4, */
+    /*     L"WfpRedirect Connect Callout"); */
+    /* if (!NT_SUCCESS(status)) { FwpmTransactionAbort0(g_EngineHandle); WfpRedirUnregister(); return status; } */
+
+    /* status = AddFilter( */
+    /*     g_EngineHandle, */
+    /*     &WFPREDIR_CONNECT_FILTER_GUID, */
+    /*     &FWPM_LAYER_ALE_CONNECT_REDIRECT_V4, */
+    /*     &WFPREDIR_CONNECT_CALLOUT_GUID, */
+    /*     L"WfpRedirect Connect Filter"); */
+    /* if (!NT_SUCCESS(status)) { FwpmTransactionAbort0(g_EngineHandle); WfpRedirUnregister(); return status; } */
+
 
     // 3c. Bind-redirect management callout + filter
-    status = AddManagementCallout(
+   status = AddManagementCallout(
         g_EngineHandle,
         &WFPREDIR_BIND_CALLOUT_GUID,
         &FWPM_LAYER_ALE_BIND_REDIRECT_V4,
@@ -191,7 +192,6 @@ WfpRedirRegister(_In_ PDEVICE_OBJECT DeviceObject)
         &WFPREDIR_BIND_CALLOUT_GUID,
         L"WfpRedirect Bind Filter");
     if (!NT_SUCCESS(status)) { FwpmTransactionAbort0(g_EngineHandle); return status; }
-
     // 4. Commit
     status = FwpmTransactionCommit0(g_EngineHandle);
     if (!NT_SUCCESS(status)) {
