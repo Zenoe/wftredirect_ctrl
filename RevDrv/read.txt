@@ -1,0 +1,4 @@
+﻿RevDrv
+refine code. pro-level
+RevDrvCtl obtain default gateway, pass to kernel driver, not need.
+but the passing structure from user mode to kernel mode is for demonstration, and can be extended to pass more complex data in the future if needed.
